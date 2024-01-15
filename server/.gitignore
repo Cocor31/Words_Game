@@ -1,0 +1,6 @@
+node_modules
+.env
+mysql
+.scannerwork
+scripts/opt
+coverage/

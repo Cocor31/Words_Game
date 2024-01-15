@@ -1,0 +1,1361 @@
+##############################################################################
+#	        Words Game
+##############################################################################
+
+Créer dossier projet "vite-chat-app"
+
+lien tuto:
+https://dev.to/novu/building-a-chat-app-with-socketio-and-react-2edj
+
+
+#=====================================	
+#	Création Front End Vite ReactJS
+#=====================================
+
+Se placer dans le dossier où l'on veut créer le projet et lancer la commande:
+	Se placer dans le dossier où l'on veut créer le projet (ici vite-chat-app) et lancer la commande:
+	npm create vite@latest
+	=> y
+	=> Nom du projet: ex: "client"
+	=> React
+	=> Javascript
+
+Ouvrir vite-chat-app dans vscode:
+	code .
+	
+Une fois terminé se placer dans "client" et lancer l'installation des dépendances:
+	cd client
+	npm i
+	
+Une fois terminé lancer l'installation des dépendances:
+	npm install socket.io-client react-router-dom
+	
+Tester que l'application marche:
+	npm run dev	
+
+Supprimer tout d App.js et mettre:
+    <div>
+      <p>Hello World !</p>
+    </div>
+
+On note le port sur lequel ViteJS lance le mode dev:
+	=> 5173
+	=> Cela nous servira pour dire au serveur de créer une socket qui écoute sur ce port
+	
+--------------------------		
+	Variables Envvironnement
+--------------------------	
+
+créer fichier ".env" pour y mettre:
+	VITE_SERVER_URL=localhost
+	VITE_SERVER_PORT=5000
+	
+#=====================================	
+#	Création Back End Express
+#=====================================
+Créer dossier "server" sous projet "vite-chat-app"
+
+--------------------------		
+	Installation packet
+--------------------------
+ouvrir nouveau terminal dans vscode
+	cd server
+	npm init -y
+	npm i express nodemon cors dotenv socket.io 
+	
+--------------------------		
+	Package.json
+--------------------------	
+dans package.json mettre server.js sur variable main:
+	"main": "server.js",
+	
+puis mettre les script de démarrage:	
+	"scripts": {
+	"start": "node -r dotenv/config server.js",
+	"dev": "nodemon -r dotenv/config server.js"
+	},
+
+--------------------------		
+	Variables Envvironnement
+--------------------------	
+
+créer fichier ".env" pour y mettre:
+	SERVER_PORT=5000
+	# PREFIX=
+
+	# For listening socket from front
+	FRONT_URL=127.0.0.1
+	FRONT_PORT=5173
+	
+--------------------------		
+	Fichier app.js
+--------------------------
+créer sous racine du dossier server:
+	app.js
+
+
+mettre le contenu suivant:
+	/*** IMPORT */
+	const express = require('express')
+	const cors = require('cors')
+
+	/*** INIT API */
+	const app = express()
+
+	const PREFIX = process.env.PREFIX || ""
+
+	app.use(cors({
+		origin: "*",
+		methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+		allowedHeaders: "Origin, X-Requested-With, x-access-token, role, Content, Accept, Content-Type, Authorization"
+	}))
+
+	app.use(express.json())
+	app.use(express.urlencoded({ extended: true }))
+
+
+	// /*** IMPORT ROUTER */
+	// const user_router = require('./routes/user_r')
+
+	/*** MAIN ROUTER */
+	app.get(PREFIX + '/', (req, res) => res.send(`I'm online. All is OK ! `))
+	// app.use(PREFIX + '/users', user_router)
+	app.all('*', (req, res) => res.status(501).send('What the hell are you doing !?!'))
+
+	/*** Export for server and Test */
+	module.exports = app
+
+	
+--------------------------		
+	Fichier server.js
+--------------------------
+créer sous racine du dossier server:
+	server.js
+
+
+mettre le contenu suivant:
+	/*************************/
+	/*** Import used modules */
+	const app = require('./app')
+	
+	const SERVER_PORT = process.env.SERVER_PORT || 4000
+
+	/*** START Server */
+	app.listen(SERVER_PORT, () => {
+		console.log(`This server running on port ${SERVER_PORT}`)
+})
+
+
+
+#=====================================	
+#	Création Socket
+#=====================================
+--------------------------		
+	Socket coté Server
+--------------------------
+Créer un fichier "socket.js" et y mettre le contenu suivant:
+	const app = require('./app')
+	const http = require('http').Server(app);
+
+	const FRONT_URL = process.env.FRONT_URL || "localhost"
+	const FRONT_PORT = process.env.FRONT_PORT || 3000
+	const SOCKET_URL_LISTEN = "http://" + FRONT_URL + ":" + FRONT_PORT //"http://localhost:3000"
+
+	const socketIO = require('socket.io')(http, {
+		cors: {
+			origin: SOCKET_URL_LISTEN
+		}
+	});
+
+	socketIO.on('connection', (socket) => {
+		console.log(`✅: ${socket.id} user just connected!`);
+
+		socketIO.emit('NewUser', socket.id);
+
+		socket.on('disconnect', () => {
+			console.log('❌: A user disconnected');
+		});
+	});
+
+	module.exports = http
+	
+	
+Modifier le fichier "server.js" pour qu'il prenne la socket comme ceci:
+
+	/*************************/
+	/*** Import used modules */
+	const http = require('./socket')
+
+	const SERVER_PORT = process.env.SERVER_PORT || 4000
+
+	http.listen(SERVER_PORT, () => {
+		console.log(`Server listening on ${SERVER_PORT}`);
+	});
+
+
+--------------------------		
+	Socket coté Client
+--------------------------
+Dans fichier "App.js" du client ajouter le code suivant en tête du fichier pour gérer la socket: 
+	import socketIO from 'socket.io-client';
+
+	// Socket listenning server
+	const SERVER_URL = import.meta.env.VITE_SERVER_URL || "localhost"
+	const SERVER_PORT = import.meta.env.VITE_SERVER_PORT || 4000
+	const socket = socketIO.connect("http://" + SERVER_URL + ":" + SERVER_PORT);
+
+=> l'url doit correspondre à celle de notre serveur api sur lequel le listen est lancé dans "server.js"
+	
+	
+
+#=====================================	
+#	Home Page
+#=====================================
+
+Dans dossier "client" créer la page "Home.jsx" dans un dossier "pages" de préférence:
+Y mettre le contenu suivant: 
+	import React, { useState } from 'react';
+	import { useNavigate } from 'react-router-dom';
+
+	const Home = () => {
+	  const navigate = useNavigate();
+	  const [userName, setUserName] = useState('');
+
+	  const handleSubmit = (e) => {
+		e.preventDefault();
+		localStorage.setItem('userName', userName);
+		navigate('/chat');
+	  };
+	  return (
+		<form className="home__container" onSubmit={handleSubmit}>
+		  <h2 className="home__header">Sign in to Open Chat</h2>
+		  <label htmlFor="username">Username</label>
+		  <input
+			type="text"
+			minLength={6}
+			name="username"
+			id="username"
+			className="username__input"
+			value={userName}
+			onChange={(e) => setUserName(e.target.value)}
+		  />
+		  <button className="home__cta">SIGN IN</button>
+		</form>
+	  );
+	};
+
+	export default Home;
+
+
+#=====================================	
+#	Chat Page
+#=====================================
+--------------------------		
+	Component ChatBar
+--------------------------
+Créer dans src/components/ le  fichier "ChatBar.jsx" et y mettre ce contenu:
+	import React from 'react';
+
+	const ChatBar = () => {
+	  return (
+		<div className="chat__sidebar">
+		  <h2>Open Chat</h2>
+
+		  <div>
+			<h4 className="chat__header">ACTIVE USERS</h4>
+			<div className="chat__users">
+			  <p>User 1</p>
+			  <p>User 2</p>
+			  <p>User 3</p>
+			  <p>User 4</p>
+			</div>
+		  </div>
+		</div>
+	  );
+	};
+
+	export default ChatBar;
+
+--------------------------		
+	Component ChatBody
+--------------------------
+Créer dans src/components/ le  fichier "ChatBody.jsx" et y mettre ce contenu:
+	import React from 'react';
+	import { useNavigate } from 'react-router-dom';
+
+	const ChatBody = () => {
+		const navigate = useNavigate();
+
+		const handleLeaveChat = () => {
+			localStorage.removeItem('userName');
+			navigate('/');
+			window.location.reload();
+		};
+
+		return (
+			<>
+				<header className="chat__mainHeader">
+					<p>Hangout with Colleagues</p>
+					<button className="leaveChat__btn" onClick={handleLeaveChat}>
+						LEAVE CHAT
+					</button>
+				</header>
+
+				{/*This shows messages sent from you*/}
+				<div className="message__container">
+					<div className="message__chats">
+						<p className="sender__name">You</p>
+						<div className="message__sender">
+							<p>Hello there</p>
+						</div>
+					</div>
+
+					{/*This shows messages received by you*/}
+					<div className="message__chats">
+						<p>Other</p>
+						<div className="message__recipient">
+							<p>Hey, I'm good, you?</p>
+						</div>
+					</div>
+
+					{/*This is triggered when a user is typing*/}
+					<div className="message__status">
+						<p>Someone is typing...</p>
+					</div>
+				</div>
+			</>
+		);
+	};
+
+	export default ChatBody;
+
+--------------------------		
+	Component ChatFooter
+--------------------------
+Créer dans src/components/ le  fichier "ChatFooter.jsx" et y mettre ce contenu:
+	import React, { useState } from 'react';
+
+	const ChatFooter = ({ socket }) => {
+	  const [message, setMessage] = useState('');
+
+	  const handleSendMessage = (e) => {
+		e.preventDefault();
+		console.log({ userName: localStorage.getItem('userName'), message });
+		setMessage('');
+	  };
+	  return (
+		<div className="chat__footer">
+		  <form className="form" onSubmit={handleSendMessage}>
+			<input
+			  type="text"
+			  placeholder="Write message"
+			  className="message"
+			  value={message}
+			  onChange={(e) => setMessage(e.target.value)}
+			/>
+			<button className="sendBtn">SEND</button>
+		  </form>
+		</div>
+	  );
+	};
+
+	export default ChatFooter;
+
+--------------------------		
+	Chat Page
+--------------------------
+Dans dossier "client" créer la page "Home.jsx" dans un dossier "pages" de préférence:
+Y mettre le contenu suivant:
+	import React from 'react';
+	import ChatBar from '../components/ChatBar';
+	import ChatBody from '../components/ChatBody';
+	import ChatFooter from '../components/ChatFooter';
+
+
+	const ChatPage = ({ socket }) => {
+		return (
+			<div className="chat">
+				<ChatBar />
+				<div className="chat__main">
+					<ChatBody />
+					<ChatFooter socket={socket} />
+				</div>
+			</div>
+		);
+	};
+
+	export default ChatPage;
+
+
+#=====================================	
+#	Routage Page Client
+#=====================================
+Dans fichier "App.js":
+mettre le contenu suivant dans le return:
+    <BrowserRouter>
+      <div>
+        <Routes>
+          <Route path="/" element={<Home socket={socket} />}></Route>
+          <Route path="/chat" element={<ChatPage socket={socket} />}></Route>
+        </Routes>
+      </div>
+    </BrowserRouter>
+
+
+
+
+#=====================================	
+#	Sending messages between Client and Server
+#=====================================
+--------------------------		
+	Client
+--------------------------
+Dans le fichier "ChatFooter.jsx" ajouter dans la fonction handleSendMessage juste avant setMessage(''); :
+	if (message.trim() && localStorage.getItem('userName')) {
+		const date = new Date()
+		const name = localStorage.getItem('userName')
+		socket.emit('message', {
+			text: message,
+			name: name,
+			id: `${name}_${date.toISOString()}`,
+			date: date,
+			socketID: socket.id,
+		});
+	}
+
+--------------------------		
+	Server
+--------------------------
+Dans le fichier "socket.js" ajouter la fonction pour écouter sur la socket le terme "message" en ajoutant cette fonction juste avant socket.on('disconnect', () => { :
+
+    //Listens and sends the return message to all the users on the server
+    socket.on('message', (data) => {
+        socketIO.emit('messageResponse', data);
+    });
+
+
+--------------------------		
+	Client Ecouter messageResponse du serveur 
+--------------------------
+Il faut ecouter le terme "messageResponse" venant du server et compiler les messages dans un Array messages qu'on passe à l'élément chat body.
+
+Voici à quoi doit ressembler le fichier "ChatPage.js" :
+	import React, { useEffect, useState } from 'react';
+	import ChatBar from '../components/ChatBar';
+	import ChatBody from '../components/ChatBody';
+	import ChatFooter from '../components/ChatFooter';
+
+
+	const ChatPage = ({ socket }) => {
+		const [messages, setMessages] = useState([]);
+
+		useEffect(() => {
+			socket.on('messageResponse', (data) => setMessages([...messages, data]));
+		}, [socket, messages]);
+
+		return (
+			<div className="chat">
+				<ChatBar socket={socket} />
+				<div className="chat__main">
+					<ChatBody messages={messages} />
+					<ChatFooter socket={socket} />
+				</div>
+			</div>
+		);
+	};
+
+	export default ChatPage;
+
+--------------------------		
+	Client Mettre à jour liste des Messages pour tous les clients
+--------------------------
+Mettre à jour le fichier "ChatBody.jsx" pour qu'il puisse compiler tous les messages dans le message_container
+
+Voici à quoi doit ressembler le fichier "ChatPage.js" :
+	import React from 'react';
+	import { useNavigate } from 'react-router-dom';
+
+	const ChatBody = ({ messages }) => {
+		const navigate = useNavigate();
+
+		const handleLeaveChat = () => {
+			localStorage.removeItem('userName');
+			navigate('/');
+			window.location.reload();
+		};
+
+		return (
+			<>
+				<header className="chat__mainHeader">
+					<p>Hangout with Colleagues</p>
+					<button className="leaveChat__btn" onClick={handleLeaveChat}>
+						LEAVE CHAT
+					</button>
+				</header>
+
+				<div className="message__container">
+					{messages.map((message) =>
+						message.name === localStorage.getItem('userName') ? (
+							<div className="message__chats" key={message.id}>
+								<p className="sender__name">You</p>
+								<div className="message__sender">
+									<p>{message.text}</p>
+								</div>
+							</div>
+						) : (
+							<div className="message__chats" key={message.id}>
+								<p>{message.name}</p>
+								<div className="message__recipient">
+									<p>{message.text}</p>
+								</div>
+							</div>
+						)
+					)}
+
+					<div className="message__status">
+						<p>Someone is typing...</p>
+					</div>
+				</div>
+			</>
+		);
+	};
+
+	export default ChatBody;
+
+
+#=====================================	
+#	Afficher tous les joueurs connectés
+#=====================================
+
+On veut voir tous les joueurs sur le chat dans la chatbar. 
+On va donc regarder les utilisateurs qui se loguent et les envoyer au serveurs pour qu'il renvoie à tous les clients la listes complète des users.
+
+--------------------------		
+	Client Send newUser to Server
+--------------------------
+Dans "Home.jsx" ajouter la fonction suivante dans la fonction handleSubmit() 
+    //sends the username and socket ID to the Node.js server
+    socket.emit('newUser', { userName, socketID: socket.id });
+
+=> Ne pas oublier d'ajouter la props { socket }, envoyé par App.jsx, en input de la const Home
+
+--------------------------		
+	Server Listen newUser and send to List of Users in newUserResponse
+--------------------------
+Dans fichier "socket.js" initialiser en haut un array users et 
+	let users = [];
+
+Toujours dans le fichier "socket.js" ajouter la fonction listen "newUser"  après listen "message":
+    //Listens when a new user joins the server
+    socket.on('newUser', (data) => {
+        //Adds the new user to the list of users
+        users.push(data);
+        //Sends the list of users to the client
+        socketIO.emit('newUserResponse', users);
+    });
+
+Toujours dans le fichier "socket.js" supprimer le user de l'Array users dans la fonction listen "disconnect" :
+	//Updates the list of users when a user disconnects from the server
+	users = users.filter((user) => user.socketID !== socket.id);
+	// console.log(users);
+	//Sends the list of users to the client
+	socketIO.emit('newUserResponse', users);
+	socket.disconnect();
+
+--------------------------		
+	Client Listen newUserResponse to update list users
+--------------------------
+Dans le fichier "ChatBar.jsx" :
+=> Ajouter props { socket } en input de ChatBar
+
+=> Avant return ajouter gestion users comme ceci:
+    const [users, setUsers] = useState([]);
+
+    useEffect(() => {
+        socket.on('newUserResponse', (data) => setUsers(data));
+    }, [socket, users]);
+	
+=> Remplacer div className="chat__users" avec ceci:
+	<div className="chat__users">
+		{users.map((user) => (
+			<p key={user.socketID}>{user.userName}</p>
+		))}
+	</div>
+
+
+
+
+#=====================================	
+#	Client AutoScroll
+#=====================================
+
+Auto-scroll and Notify users when a user is typing
+
+--------------------------		
+	Client 
+--------------------------
+
+Dans le fichier "ChatPage.jsx":
+
+=> Ajouter un useRef qui servira à taguer une fausse div à la fin du message__container du chat body:
+	const lastMessageRef = useRef(null);
+	
+=> Ajouter use effect pour scroller dès que le state message change:
+  useEffect(() => {
+    // 👇️ scroll to bottom every time messages change
+    lastMessageRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+=> faire passer en props le useRef à ChatBody qui servira à taguer une fausse div en fin du message__container:
+	<ChatBody messages={messages} lastMessageRef={lastMessageRef} />
+	
+Dans le fichier "ChatBody.jsx":	
+=> Ajouter props { lastMessageRef } en input de ChatBody	
+
+=> Ajouter à la fin du message__container du ChatBody:	
+	<div ref={lastMessageRef} />
+	
+
+
+#=====================================	
+#	Client Affichage quand quelqu'un écrit
+#=====================================	
+	
+--------------------------		
+	Client 
+--------------------------	
+Dans le fichier "ChatPage.jsx":	
+=> Ajouter un useSate pour le typingStatus:
+	const [typingStatus, setTypingStatus] = useState('');	
+
+=> Ajouter use effect pour mettre à jour le typingStatus quand il y a une typingResponse venant du server :
+    useEffect(() => {
+        socket.on('typingResponse', (data) => setTypingStatus(data));
+    }, [socket]);
+	
+=> faire passer en props le typingStatus à ChatBody qui servira à dire qu'un utilisateur est entrain d'écrire:	
+	<ChatBody messages={messages} typingStatus={typingStatus} lastMessageRef={lastMessageRef} />
+
+Dans le fichier "ChatBody.jsx":	
+=> Ajouter props { typingStatus } en input de ChatBody
+
+=> Remplacer la div message__status par :
+	<div className="message__status">
+		<p>{typingStatus}</p>
+	</div>	
+
+Dans le fichier "ChatFooter.jsx":
+=> Ajouter la fonction "handleTyping" qui envera au server que le user du client est en train de taper		
+    const handleTyping = () => {
+        socket.emit('typing', `${localStorage.getItem('userName')} is typing`);
+    };
+
+=> Dans la balise input ajouter la propriéte "onKeyDown" qui regarde quand quelqu'un tape :
+	onKeyDown={handleTyping}
+
+		
+--------------------------		
+	Server 
+--------------------------
+Le serveur doit écouter que quelqu'un tape et envoyer l'information à tous le monde sauf le user qui écrit
+
+Dans le fichier "socket.js" ajouter la fonction listen "typing"  après listen "message":
+    //Listens when a user is typing
+    socket.on('typing', (data) => {
+        socket.broadcast.emit('typingResponse', data)
+    });
+
+
+#=====================================	
+#	UserCard avec healthbar
+#=====================================
+
+--------------------------		
+	Component UserCard
+--------------------------
+Créer dans src/components/ le  fichier "UserCard.jsx" et y mettre ce contenu:
+	import React, { useEffect, useState } from 'react';
+
+	const UserCard = ({ socketID, username, users }) => {
+		const [progress, setProgress] = useState(100);
+		const total_points = 100
+
+		const getColor = () => {
+			if (progress < 40) {
+				return "#ff0000"
+			} else if (progress < 70) {
+				return "#ffa500"
+			} else {
+				return "#2ecc71"
+			}
+		}
+
+		useEffect(() => {
+			const user = users.filter((user) => user.socketID === socketID)[0];
+			setProgress(user.score / total_points * 100)
+		}, [users, socketID, username]);
+
+		return (
+			<div className="chat__usercard">
+				<p >{username}</p>
+				<div className="chat__healthbar">
+					<div className="progress-bar">
+						<div className='progress-bar-fill' style={{ width: `${progress}%`, backgroundColor: getColor() }}></div>
+					</div>
+					<div className='progress-label'>{progress}%</div>
+
+				</div>
+			</div>
+
+		);
+	};
+
+	export default UserCard;
+
+--------------------------		
+	Component ChatBar
+--------------------------
+Dans le fichier "ChatBar.jsx" changer le return pour prendre le component UserCard.jsx comme ceci
+Créer dans src/components/ le  fichier "ChatBar.jsx" et y mettre ce contenu:
+
+		return (
+			<div className="chat__sidebar">
+				<h1>Words Game</h1>
+
+				<div>
+					<h4 className="chat__header">ACTIVE USERS</h4>
+					<ul className="chat__users">
+						{users.map((user) => (
+							<UserCard key={user.socketID} socketID={user.socketID} username={user.userName} users={users} />
+						))}
+					</ul>
+				</div>
+			</div>
+		);
+
+
+
+
+#=====================================	
+#	Création Database MariaDB pour l'API
+#=====================================
+
+--------------------------		
+	.env
+--------------------------
+Créer fichier ".env" à la racine du projet avec :
+	# BDD
+	MARIADB_HOST=127.0.0.1
+	MARIADB_PORT=3306
+	MARIADB_DATABASE=db_words_game
+	MARIADB_ROOT_PASSWORD=toor
+	MARIADB_USER=roger
+	MARIADB_PASSWORD=regor
+	MARIADB_SYNCHRONIZE=true
+	
+--------------------------		
+	Docker compose
+--------------------------
+créer fichier "docker-compose.yml" à la racine du projet et y mettre
+-------------------------------------------------------
+	version: '3.1'
+
+	services:
+
+	  bdd:
+		container_name: local_bdd
+		image: mariadb:latest
+		env_file:
+		  - .env
+		restart: always
+		volumes:
+		  - ./mysql:/var/lib/mysql
+
+		ports:
+		  - 3306:3306
+
+	  adminer:
+		container_name: adminer
+		image: adminer
+		restart: always
+		ports:
+		  - 8080:8080
+-------------------------------------------------------
+
+
+--------------------------		
+	Lancer Docker Compose
+--------------------------
+	docker compose up -d
+
+--------------------------		
+	Aller sur Adminer
+--------------------------
+http://localhost:8080/
+
+entrer les élements de connexion mis dans le "docker-compose.yml"
+      Server: bdd
+	  Utilisateur: roger
+	  Mot de passe: regor
+      Base de donnée: db_words_game
+	  
+
+--------------------------		
+	Script lancement DB
+--------------------------
+On peut ajouter un script dans le fichier "package.json" pour redémarrer automatiquement la database:
+    "db:dev:rm": "docker compose rm -s -f -v",
+    "db:dev:up": "docker compose up -d",
+    "db:dev:restart": "npm run db:dev:rm && npm run db:dev:up",
+	
+On peut aussi préciser le service que l'on veut démarrer (ou arréter) en mettant le nom du service, ici "bdd", juste après le terme "docker compose"
+
+
+--------------------------		
+	Configuration Sequelize
+--------------------------
+Installer sequelize:
+	npm i sequelize mysql2
+	
+créer un fichier "db.config.js" et y mettre le contenu suivant:
+	/*************************/
+	/*** Import used modules */
+	const { Sequelize } = require('sequelize')
+
+	/*************************/
+	/*** Récupération variables de connexion */
+	const MARIADB_DATABASE = process.env.MARIADB_DATABASE
+	const MARIADB_USER = process.env.MARIADB_USER
+	const MARIADB_PASSWORD = process.env.MARIADB_PASSWORD
+	const MARIADB_HOST = process.env.MARIADB_HOST
+	const MARIADB_PORT = process.env.MARIADB_PORT
+
+	/*************************/
+	/*** Connexion à la base de donnée */
+	let sequelize = new Sequelize(
+		MARIADB_DATABASE,
+		MARIADB_USER,
+		MARIADB_PASSWORD,
+		{
+			host: MARIADB_HOST,
+			port: MARIADB_PORT,
+			dialect: 'mysql',
+			logging: false
+		}
+	)
+
+	/*************************/
+	/*** Appel des modèles */
+	const db = {}
+	db.sequelize = sequelize
+
+
+	/*************************/
+	/*** Mise en place des relations */
+
+
+	/*************************/
+	/*** Synchronisation des modèles */
+	db.sequelize.sync({ alter: true })     // permet de synchroniser les models JS avec les tables dans la BDD
+
+	module.exports = db
+
+
+
+/!\ La synchronisation des modèles est à commenter une fois que l'application est stable. Elle peut engendrer de gros problème en cas d'erreur de code en mode de déploiement
+
+	
+--------------------------		
+	Condition Démarrage BDD avant listen API
+--------------------------	
+dans server.js ajouter import de la db config:
+	let DB = require('./db.config')
+	
+et refaire le démarage de l'API conditionner par le DB.authenticate:
+	/****************************/
+	/*** Démarrage de l'API*/
+	DB.sequelize.authenticate()
+		.then(() => console.log('MariaDB Connexion OK'))
+		.then(() => {
+			app.listen(process.env.API_PORT, () => {
+				console.log(`This server is running on port ${process.env.API_PORT}. Have fun !`)
+			})
+		})
+		.catch(e => console.log('Database Error', e))
+
+On peut faire le test en redémarrant le server si on l'avait arréter:
+	npm run dev
+	=> si message "MariaDB Connexion OK" et "This server is running on port ..."  => Tout est OK, on est connecté à MariaDB
+	
+	
+#=====================================	
+#	Création Models MariaDB
+#=====================================
+Créer dossier "models" à la racine du projet:
+
+créer dedans ce dossier "models" nos fichiers model pour entités: eleve, formateur, formation, module, note
+ 
+exemple pour "User.js":
+	/*************************/
+	/*** Import used modules */
+	const { DataTypes } = require('sequelize')
+
+	/*************************/
+	/*** Import used modules */
+	module.exports = (sequelize) => {
+		const User = sequelize.define('User', {
+			id: {
+				type: DataTypes.INTEGER(10),
+				primaryKey: true,
+				autoIncrement: true
+			},
+			firstname: {
+				type: DataTypes.STRING(100),
+				defaultValue: '',
+				allowNull: false
+			},
+			lastname: {
+				type: DataTypes.STRING(100),
+				defaultValue: '',
+				allowNull: false
+			},
+			email: {
+				type: DataTypes.STRING,
+				validate: {
+					isEmail: true,             // Ici une contrainte de données
+				},
+				allowNull: false
+			},
+			password: {
+				type: DataTypes.STRING(64),
+				is: /^[0-9a-f]{64}$/i,        // Ici une contrainte de données
+				allowNull: false
+			},
+		})
+		return User
+	}
+
+
+#=====================================	
+#	Appel des Models dans Config Mariadb
+#=====================================
+Dans notre fichier "db.config.js" ajouter sous "appel des modèles":
+	db.User = require('./models/User')(sequelize)
+
+#=====================================	
+#	Controller User
+#=====================================
+Créer dossier "controllers" à la racine du projet:	
+
+créer dedans ce dossier "controllers" le fichier "User.js" et y mettre le contenu:
+	/***********************************/
+	/*** Import des module nécessaires */
+	const DB = require('../db.config')
+	const User = DB.User
+
+	/**********************************/
+	/*** Routage de la ressource User */
+
+	exports.getAllUsers = (req, res) => {
+		User.findAll()
+			.then(users => res.json({ data: users }))
+			.catch(err => res.status(500).json({ message: 'Database Error', error: err }))
+	}
+
+	exports.getUser = async (req, res) => {
+		let pid = parseInt(req.params.id)
+
+		try {
+			// Récupération de l'utilisateur et vérification
+			let user = await User.findOne({ where: { id: pid } })
+			if (user === null) {
+				return res.status(404).json({ message: 'This user does not exist !' })
+			}
+
+			return res.json({ data: user })
+		} catch (err) {
+			return res.status(500).json({ message: 'Database Error', error: err })
+		}
+	}
+
+	exports.addUser = async (req, res) => {
+		const { firstname, lastname, email, password } = req.body
+
+		// Validation des données reçues
+		if (!firstname || !lastname || !email || !password) {
+			return res.status(400).json({ message: 'Missing Data' })
+		}
+
+		try {
+			// Vérification si l'utilisateur existe déjà
+			const user = await User.findOne({ where: { email: email }, raw: true })
+			if (user !== null) {
+				return res.status(409).json({ message: `This email is already associated with a user !` })
+			}
+
+			// Hashage du mot de passe utilisateur
+			//let hash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUND))
+			//req.body.password = hash
+
+			// Céation de l'utilisateur
+			let userc = await User.create(req.body)
+			return res.status(201).json({ message: 'User Created', data: userc })
+
+		} catch (err) {
+			if (err.name == 'SequelizeDatabaseError') {
+				res.status(500).json({ message: 'Database Error', error: err })
+			}
+			res.status(500).json({ message: 'Hash Process Error', error: err })
+		}
+	}
+
+	exports.updateUser = async (req, res) => {
+		let pid = parseInt(req.params.id)
+		const { firstname, lastname, email, password } = req.body
+
+		try {
+			// Recherche de l'utilisateur et vérification
+			let user = await User.findOne({ where: { id: pid }, raw: true })
+			if (user === null) {
+				return res.status(404).json({ message: 'This user does not exist !' })
+			}
+
+			// récupération des données
+			let userp = {}
+			if (firstname) { userp.firstname = firstname }
+			if (lastname) { userp.lastname = lastname }
+			if (email) { userp.email = email }
+			if (password) {
+				// Password Hash
+				// let hash = await bcrypt.hash(password, parseInt("process.env.BCRYPT_SALT_ROUND"))
+				// userp.password = hash
+				userp.password = password
+			}
+
+			// Mise à jour de l'utilisateur
+			await User.update(userp, { where: { id: pid } })
+			return res.json({ message: 'User Updated', data: { ...user, ...userp } })
+		} catch (err) {
+			return res.status(500).json({ message: 'Database Error', error: err })
+		}
+	}
+
+	exports.deleteUser = async (req, res) => {
+		let pid = parseInt(req.params.id)
+
+		// Vérification si le champ id est présent et cohérent
+		if (!pid) {
+			return res.status(400).json({ message: `Missing Parameter` })
+		}
+
+		try {
+			// Suppression
+			let count = await User.destroy({ where: { id: pid } })
+			// Test si résultat
+			if (count === 0) {
+				return res.status(404).json({ message: `This user does not exist !` })
+			}
+			// Message confirmation Deletion
+			return res.status(200).json({ message: `User (id: ${pid} ) Successfully Deleted. ${count} row(s) deleted` })
+
+		} catch (err) {
+			return res.status(500).json({ message: `Database Error`, error: err })
+		}
+	}
+
+#=====================================	
+#	Routes spécifique à nos entités
+#=====================================	
+Créer dossier "routes" à la racine du projet:
+
+créer dedans ce dossier "routes" le fichier "User.js" et y mettre le contenu:
+	/***********************************/
+	/*** Import des module nécessaires */
+	const express = require('express')
+	const userCtrl = require('../controllers/User')
+
+	/***************************************/
+	/*** Récupération du routeur d'express */
+	let router = express.Router()
+
+	/*********************************************/
+	/*** Middleware pour logger dates de requete */
+	router.use((req, res, next) => {
+		const event = new Date()
+		console.log('User Time:', event.toString())
+		next()
+	})
+
+
+	/**********************************/
+	/*** Routage de la ressource User */
+
+	router.get('/', userCtrl.getAllUsers)
+
+	router.get('/:id([0-9]+)', userCtrl.getUser)
+
+	router.put('', userCtrl.addUser)
+
+	router.patch('/:id([0-9]+)', userCtrl.updateUser)
+
+	router.delete('/:id([0-9]+)', userCtrl.deleteUser)
+
+	module.exports = router
+
+
+
+#=====================================	
+#	Routage principal
+#=====================================	
+dans fichier "app.js" ajouter:
+
+sous "import router" ajouter l'import du router user.js:
+	const user_router = require('./routes/User')
+	
+sous "main router" ajouter la route principal vers notre router user.js (entre app.get("/") et app.all("*"):
+	app.use(PREFIX + '/users', user_router)
+
+
+##############################################################################
+#	       Sécurité
+##############################################################################
+#=====================================	
+#	Chiffrement Mot de Passe
+#=====================================
+
+--------------------------		
+	Config Bcrypt
+--------------------------
+Installation dépendance bcrypt:
+	npm i bcrypt
+
+Paramètre de salage Bcrypt dans ".env":
+	BCRYPT_SALT_ROUND=10
+
+--------------------------		
+	Update Controllers User.js
+--------------------------
+ajouter import bcrypt:
+	const bcrypt = require('bcrypt')
+	
+dans fonction addUser() ajouter le hachage du mot de passe avant User.create(req.body) comme ceci:
+	// Hashage du mot de passe utilisateur
+	let hash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUND))
+	req.body.password = hash
+
+idem pour fonction updateUser():
+	if (password) {
+		// Password Hash
+		let hash = await bcrypt.hash(password, parseInt("process.env.BCRYPT_SALT_ROUND"))
+		userp.password = hash
+	}
+
+
+#=====================================	
+#	Authentification
+#=====================================	
+
+--------------------------		
+	Config JsonWebToken
+--------------------------
+Installation dépendance bcrypt:
+	npm i jsonwebtoken
+
+Paramètre de salage Bcrypt dans ".env":
+	JWT_SECRET=laphrasesuperlonguequiestsuperdifficileatrouver
+	JWT_DURING=1h
+
+--------------------------		
+	MiddleWare jwtCheck.js
+--------------------------	
+Créer dossier "middlewares" et créer dedans le fichier "jwtCheck.js" avec ce contenu: 
+	/***********************************/
+	/*** Import des module nécessaires */
+	const jwt = require('jsonwebtoken')
+
+	/*************************/
+	/*** Extraction du token */
+	const extractBearer = authorization => {
+		if(typeof authorization !== 'string'){
+			return false
+		}
+
+		// On isole le token
+		const matches = authorization.match(/(bearer)\s+(\S+)/i)
+
+		return matches && matches[2]
+	}
+
+	/******************************************/
+	/*** Vérification de la présence du token */
+	const checkTokenMiddleware = (req, res, next) => {
+		const token = req.headers.authorization && extractBearer(req.headers.authorization)
+
+		if(!token){
+			return res.status(401).json({ message: 'Ho le petit malin !!!'})
+		}
+
+		// Vérifier la validité du token
+		jwt.verify(token, process.env.JWT_SECRET, (err, decodedToken) => {
+			if(err){
+				return res.status(401).json({message: 'Bad token'})
+			}
+			next()
+		})
+	}
+
+	module.exports = checkTokenMiddleware
+	
+--------------------------		
+	Controller d'Authentification
+--------------------------	
+Dans dossier "controllers" créer fichier "Auth.js" avec ce contenu:
+	/*************************/
+	/*** Import used modules */
+	const bcrypt = require('bcrypt')
+	const jwt = require('jsonwebtoken')
+
+	const DB = require("../db.config")
+	const User = DB.User
+
+	/**********************************/
+	/*** Unit route for Auth resource */
+
+	exports.signup = async (req, res) => {
+		const { firstname, lastname, email, password } = req.body
+
+		// Validation des données reçues
+		if (!firstname || !lastname || !email || !password) {
+			return res.status(400).json({ message: 'Missing Data' })
+		}
+
+		try {
+			// Vérification si l'utilisateur existe déjà
+			const user = await User.findOne({ where: { email: email }, raw: true })
+			if (user !== null) {
+				return res.status(409).json({ message: `This email is already associated with a user !` })
+			}
+
+			// Hashage du mot de passe utilisateur
+			let hash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUND))
+			req.body.password = hash
+
+			// Céation de l'utilisateur
+			await User.create(req.body)
+			return res.status(201).json({ message: 'User Created' })
+
+		} catch (err) {
+			res.status(500).json({ message: 'Internal Error' })
+		}
+	}
+
+	exports.login = async (req, res) => {
+		const { email, password } = req.body
+		// Check data from request
+		if (!email || !password) {
+			return res.status(400).json({ message: 'Bad credentials' })
+		}
+
+		try {
+			// Get admin
+			let user = await User.findOne({ where: { email: email } })
+			// Test si résultat
+			if (user === null) {
+				return res.status(404).json({ message: `This user does not exist !` })
+			}
+			// Password check  
+			let test = await bcrypt.compare(password, user.password)
+			if (!test) {
+				return res.status(401).json({ message: 'Wrong password' })
+			}
+
+			// JWT generation
+			const token = jwt.sign({
+				payload: { userId: user.id, group: "user" }
+			}, process.env.JWT_SECRET, { expiresIn: process.env.JWT_DURING })
+
+			return res.json({ access_token: token })
+		} catch (err) {
+			console.log(err)
+		}
+	}
+
+#=====================================	
+#	Routes spécifique à Authentification
+#=====================================	
+
+Dans dossier "routes" le fichier "Auth.js" et y mettre le contenu:
+	/***********************************/
+	/*** Import des module nécessaires */
+	const express = require('express')
+	const authCtrl = require('../controllers/Auth')
+
+	/***************************************/
+	/*** Récupération du routeur d'express */
+	let router = express.Router()
+
+	/*********************************************/
+	/*** Middleware pour logger dates de requete */
+
+
+	/**********************************/
+	/*** Routage de la ressource Auth */
+	router.post('/signup', authCtrl.signup)
+	router.post('/login', authCtrl.login)
+
+	module.exports = router
+
+#=====================================	
+#	Routage principal
+#=====================================	
+dans fichier "app.js" ajouter:
+
+sous "import router" ajouter l'import du router Auth.js:
+	const auth_router = require('./routes/Auth')
+	
+sous "main router" ajouter la route principal vers notre router Auth.js (entre app.get("/") et app.all("*"):
+	app.use(PREFIX + '/', auth_router)
+
+
+
+!!!! Arrété là, il faut ensuite créer des rôles dans l'API et bloquer les route avec le jwt et les roles. Ainsi que des droits pour modifier les données users par exemple
+	Dans le front il faudra sauvegarder le token et les info users(id. pseudo)
+
+
+
+
+
+
+
+
+
+
+
+
+
+#=====================================	
+#	Login
+#=====================================
+
+
+https://www.digitalocean.com/community/tutorials/how-to-add-login-authentication-to-react-applications
+
+
+
+
+
+
+	
+
+lien utiles:	
+	
+https://dev.to/novu/building-a-chat-app-with-socketio-and-react-2edj	
+https://www.freecodecamp.org/news/build-a-realtime-chat-app-with-react-express-socketio-and-harperdb/
+https://github.com/Cocor31/TD_API_DOCKER_SONAR/blob/main/server.js
+https://www.digitalocean.com/community/tutorials/how-to-add-login-authentication-to-react-applications
+
+
+
+
+
+
