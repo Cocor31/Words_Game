@@ -1433,8 +1433,15 @@ Voici à quoi ressemble le fichier "roleCheck.js":
 
 
 
-!!!! Arrété là, il faut ensuite créer des rôles dans l'API et bloquer les route avec le jwt et les roles. Ainsi que des droits pour modifier les données users par exemple
+
+
+
+
+!!!! Arrété là, 
 	Dans le front il faudra sauvegarder le token et les info users(id. pseudo)
+
+
+
 
 
 
