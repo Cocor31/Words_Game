@@ -1221,34 +1221,6 @@ Dans dossier "controllers" créer fichier "Auth.js" avec ce contenu:
 	/**********************************/
 	/*** Unit route for Auth resource */
 
-	exports.signup = async (req, res) => {
-		const { firstname, lastname, email, password } = req.body
-
-		// Validation des données reçues
-		if (!firstname || !lastname || !email || !password) {
-			return res.status(400).json({ message: 'Missing Data' })
-		}
-
-		try {
-			// Vérification si l'utilisateur existe déjà
-			const user = await User.findOne({ where: { email: email }, raw: true })
-			if (user !== null) {
-				return res.status(409).json({ message: `This email is already associated with a user !` })
-			}
-
-			// Hashage du mot de passe utilisateur
-			let hash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUND))
-			req.body.password = hash
-
-			// Céation de l'utilisateur
-			await User.create(req.body)
-			return res.status(201).json({ message: 'User Created' })
-
-		} catch (err) {
-			res.status(500).json({ message: 'Internal Error' })
-		}
-	}
-
 	exports.login = async (req, res) => {
 		const { email, password } = req.body
 		// Check data from request
@@ -1280,15 +1252,16 @@ Dans dossier "controllers" créer fichier "Auth.js" avec ce contenu:
 		}
 	}
 
-#=====================================	
-#	Routes spécifique à Authentification
-#=====================================	
 
+--------------------------		
+	Routes spécifique à Authentification
+--------------------------	
 Dans dossier "routes" le fichier "Auth.js" et y mettre le contenu:
 	/***********************************/
 	/*** Import des module nécessaires */
 	const express = require('express')
 	const authCtrl = require('../controllers/Auth')
+	const userCtrl = require('../controllers/User')
 
 	/***************************************/
 	/*** Récupération du routeur d'express */
@@ -1300,14 +1273,14 @@ Dans dossier "routes" le fichier "Auth.js" et y mettre le contenu:
 
 	/**********************************/
 	/*** Routage de la ressource Auth */
-	router.post('/signup', authCtrl.signup)
+	router.post('/signin', userCtrl.addUser)
 	router.post('/login', authCtrl.login)
 
 	module.exports = router
 
-#=====================================	
-#	Routage principal
-#=====================================	
+--------------------------		
+	Routage principal
+--------------------------
 dans fichier "app.js" ajouter:
 
 sous "import router" ajouter l'import du router Auth.js:
@@ -1317,19 +1290,151 @@ sous "main router" ajouter la route principal vers notre router Auth.js (entre a
 	app.use(PREFIX + '/', auth_router)
 
 
+#=====================================	
+#	Authorization Roles (Moindre Privilège API)
+#=====================================	
+
+roles:
+https://www.youtube.com/watch?v=cs-zr4-0qXU&list=PLwJWw4Pbl4w_sEL35LMX9PdWEea4Rq6JK&index=14
+
+--------------------------		
+	Variable environnement ROLES_LIST
+--------------------------
+Ajouter dans le .env la liste des roles dans un string format JSON comme ceci:
+	# ROLES
+	ROLES_LIST={"admin":5248,"modo":1295,"user":3284}
+
+
+
+--------------------------		
+	User Model Update
+--------------------------
+Dans fichier "models/User.js" ajouter la propriété roles comme ceci:
+	roles: {
+		type: DataTypes.JSON(),
+		allowNull: false
+	},
+
+
+--------------------------		
+	Controller User.js Update
+--------------------------
+Dans controllers/User.js ajouter l'import de la liste de roles en haut comme ceci:
+	const ROLES_LIST = JSON.parse(process.env.ROLES_LIST)
+
+Dans la fonction "addUser" ajouter la création du role par défaut juste avant la création du user dans la BDD comme ceci:
+	// Ajout du role de base
+	req.body.roles = { "roles": [ROLES_LIST.user] }
+
+--------------------------		
+	Controller Auth.js Update
+--------------------------
+Dans la fonction login, Ajouter le role de l'utilisateur dans le token généré comme ceci:
+	// JWT generation
+	const token = jwt.sign({
+		payload: { userId: user.id, roles: JSON.parse(user.roles).roles }
+	}, process.env.JWT_SECRET, { expiresIn: process.env.JWT_DURING })
+	
+
+--------------------------		
+	Middleware jwtCheck Update
+--------------------------
+Dans la fonction checkTokenMiddleware profité du décodage du token pour extraire le userId et le role et les ajouter à la req comme ceci:
+    // Vérifier la validité du token
+    jwt.verify(token, process.env.JWT_SECRET, (err, decodedToken) => {
+        if (err) {
+            return res.status(401).json({ message: 'Bad token' })
+        }
+        req.userID = decodedToken.payload.userId
+        req.roles = decodedToken.payload.roles
+        next()
+    })
+
+--------------------------		
+	Création Middleware roleCheck 
+--------------------------		 
+Dans le dossier "middlewares" créer un fichier "roleCheck.js" avec le contenu suivant:
+	const roleCheck = (...authRoles) => {
+		return (req, res, next) => {
+
+			if (!req?.roles) {
+				return res.sendStatus(403)
+			}
+
+			const userRolesChecks = req.roles.map(role => authRoles.includes(role))
+			const isAutorized = userRolesChecks.find(val => val === true)
+			// console.log("ROLECHECK: user roles ", req.roles)
+			// console.log("ROLECHECK: userRolesChecks ", userRolesChecks)
+			// console.log("ROLECHECK: isAutorized ", isAutorized)
+
+			if (!isAutorized) {
+				return res.sendStatus(403)
+			}
+
+			next()
+		}
+	}
+	module.exports = roleCheck
+
+
+--------------------------		
+	Blocage des Routes avec jwtCheck et roleCheck
+--------------------------	
+Pour l'exemple on veut bloquer le getUser à toutes les personnes qui n'ont pas un des roles user, modo ou admin
+
+Dans le fichier "routes/User.js":
+Ajouter en haut les imports:
+	const roleCheck = require("../middlewares/roleCheck")
+	const jwtCheck = require("../middlewares/jwtCheck")
+	const ROLES_LIST = JSON.parse(process.env.ROLES_LIST || '{ "admin": 1, "modo": 2, "user": 3 }')
+
+Sur la route concernée ajouter les middleware avec les roles autorisé pour cette action comme ceci:
+	router.get('/', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.getAllUsers)
+
+
+
+
+
+
+#=====================================	
+#	Ajout roleCheck Owner
+#=====================================
+Pour autoriser un utilisateur à modifier les données le concernant, on ajoute une option role "owner" dans le roleCheck
+et on modifie un peu la fonction pour qu'il puisse dans ces cas là regarder si le user est propriétaire de la donnée.
+Voici à quoi ressemble le fichier "roleCheck.js":
+	const roleCheck = (...authRoles) => {
+		return (req, res, next) => {
+
+			if (!req?.roles) {
+				return res.sendStatus(403)
+			}
+
+			const userRolesChecks = req.roles.map(role => authRoles.includes(role))
+			const isAutorized = userRolesChecks.find(val => val === true)
+
+			if (!isAutorized) {
+				// S'il y a une autorisation owner on regarde si le user est le propriétaire de la donnée
+				if (authRoles.includes("owner")) {
+					const pid = parseInt(req.params.id)
+					const userId = req.userID
+					if (userId != pid) {
+						return res.sendStatus(403)
+					}
+				} else {
+					return res.sendStatus(403)
+				}
+			}
+
+			next()
+		}
+	}
+	module.exports = roleCheck
+
+
+
 
 !!!! Arrété là, il faut ensuite créer des rôles dans l'API et bloquer les route avec le jwt et les roles. Ainsi que des droits pour modifier les données users par exemple
 	Dans le front il faudra sauvegarder le token et les info users(id. pseudo)
-
-
-
-
-
-
-
-
-
-
 
 
 

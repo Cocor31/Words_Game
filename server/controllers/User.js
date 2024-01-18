@@ -118,3 +118,113 @@ exports.deleteUser = async (req, res) => {
         return res.status(500).json({ message: `Database Error`, error: err })
     }
 }
+
+
+exports.getUserRoles = async (req, res) => {
+    let pid = parseInt(req.params.id)
+
+    try {
+        // Récupération de l'utilisateur et vérification
+        let user = await User.findOne({ where: { id: pid } })
+        if (user === null) {
+            return res.status(404).json({ message: 'This user does not exist !' })
+        }
+
+        // Recupération des roles
+        return res.json({
+            "data": {
+                "UserId": user.id,
+                "roles": JSON.parse(user.roles).roles
+            }
+
+        })
+    } catch (err) {
+        return res.status(500).json({ message: 'Database Error', error: err })
+    }
+}
+
+exports.addUserRole = async (req, res) => {
+    let pid = parseInt(req.params.id)
+    let proles = parseInt(req.params.role)
+
+
+    try {
+        // Récupération de l'utilisateur et vérification
+        let user = await User.findOne({ where: { id: pid } })
+        if (user === null) {
+            return res.status(404).json({ message: 'This user does not exist !' })
+        }
+
+        // Recupération des roles
+        let roles = JSON.parse(user.roles).roles
+        console.log(roles)
+        if (!roles) {
+            roles = []
+        }
+
+        // Ajout du role si il n'existe pas
+        if (!roles.includes(proles)) {
+            roles.push(proles)
+        }
+
+        // Création d'un user partiel avec seulement des roles
+        let userp = {}
+        userp.roles = { "roles": roles }
+
+        // Mise à jour de l'utilisateur
+        await User.update(userp, { where: { id: pid } })
+
+        return res.json({ message: 'User roles Updated', data: { roles } })
+    } catch (err) {
+        return res.status(500).json({ message: 'Database Error', error: err })
+    }
+}
+
+exports.deleteUserRole = async (req, res) => {
+    let pid = parseInt(req.params.id)
+    let proles = parseInt(req.params.role)
+
+
+    try {
+        // Récupération de l'utilisateur et vérification
+        let user = await User.findOne({ where: { id: pid } })
+        if (user === null) {
+            return res.status(404).json({ message: 'This user does not exist !' })
+        }
+
+        // Recupération des roles
+        let roles = JSON.parse(user.roles).roles
+        console.log(roles)
+
+        // Ajout du role si il n'existe pas
+        if (roles && roles.includes(proles)) {
+            roles = roles.filter((role) => role !== proles)
+            // Création d'un user partiel avec seulement des roles
+            let userp = {}
+            userp.roles = { "roles": roles }
+
+            // Mise à jour de l'utilisateur
+            await User.update(userp, { where: { id: pid } })
+
+
+        }
+
+        return res.json({ message: 'User roles Updated', data: { roles } })
+
+        // // Ajout du role si il n'existe pas
+        // if (!roles.includes(proles)) {
+        //     roles.push(proles)
+        // }
+
+        // // Création d'un user partiel avec seulement des roles
+        // let userp = {}
+        // userp.roles = { "roles": roles }
+
+        // // Mise à jour de l'utilisateur
+        // await User.update(userp, { where: { id: pid } })
+
+        // return res.json({ message: 'User roles Updated', data: { roles } })
+    } catch (err) {
+        return res.status(500).json({ message: 'Database Error', error: err })
+    }
+}

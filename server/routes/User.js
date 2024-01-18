@@ -17,15 +17,16 @@ let router = express.Router()
 
 /**********************************/
 /*** Routage de la ressource User */
-
 router.get('/', jwtCheck, roleCheck(ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.getAllUsers)
 
 router.get('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.getUser)
 
-router.put('', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.addUser)
+router.put('', jwtCheck, roleCheck(ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.addUser)
 
-router.patch('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.updateUser)
-
+router.patch('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.modo, ROLES_LIST.admin, "owner"), userCtrl.updateUser)
 router.delete('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.admin), userCtrl.deleteUser)
 
+router.get('/:id([0-9]+)/roles', userCtrl.getUserRoles)
+router.put('/:id([0-9]+)/roles/:role', userCtrl.addUserRole)
+router.delete('/:id([0-9]+)/roles/:role', userCtrl.deleteUserRole)
 module.exports = router
