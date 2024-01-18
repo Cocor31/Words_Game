@@ -3,6 +3,7 @@
 const bcrypt = require('bcrypt')
 const DB = require('../db.config')
 const User = DB.User
+const ROLES_LIST = JSON.parse(process.env.ROLES_LIST)
 
 
 /**********************************/
@@ -48,6 +49,10 @@ exports.addUser = async (req, res) => {
         // Hashage du mot de passe utilisateur
         let hash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_SALT_ROUND))
         req.body.password = hash
+
+        // Ajout du role de base
+        // req.body.roles = ROLES_LIST.etoile
+        req.body.roles = { "roles": [ROLES_LIST.user] }
 
         // Céation de l'utilisateur
         let userc = await User.create(req.body)

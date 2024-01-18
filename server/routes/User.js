@@ -2,6 +2,10 @@
 /*** Import des module nécessaires */
 const express = require('express')
 const userCtrl = require('../controllers/User')
+const roleCheck = require("../middlewares/roleCheck")
+const jwtCheck = require("../middlewares/jwtCheck")
+
+const ROLES_LIST = JSON.parse(process.env.ROLES_LIST)
 
 /***************************************/
 /*** Récupération du routeur d'express */
@@ -14,14 +18,14 @@ let router = express.Router()
 /**********************************/
 /*** Routage de la ressource User */
 
-router.get('/', userCtrl.getAllUsers)
+router.get('/', jwtCheck, roleCheck(ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.getAllUsers)
 
-router.get('/:id([0-9]+)', userCtrl.getUser)
+router.get('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.getUser)
 
-router.put('', userCtrl.addUser)
+router.put('', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.addUser)
 
-router.patch('/:id([0-9]+)', userCtrl.updateUser)
+router.patch('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.user, ROLES_LIST.modo, ROLES_LIST.admin), userCtrl.updateUser)
 
-router.delete('/:id([0-9]+)', userCtrl.deleteUser)
+router.delete('/:id([0-9]+)', jwtCheck, roleCheck(ROLES_LIST.admin), userCtrl.deleteUser)
 
 module.exports = router

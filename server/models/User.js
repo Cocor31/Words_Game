@@ -33,6 +33,10 @@ module.exports = (sequelize) => {
             is: /^[0-9a-f]{64}$/i,        // Ici une contrainte de données
             allowNull: false
         },
+        roles: {
+            type: DataTypes.JSON(),
+            allowNull: false
+        },
     })
     return User
 }

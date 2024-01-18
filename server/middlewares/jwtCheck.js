@@ -29,6 +29,9 @@ const checkTokenMiddleware = (req, res, next) => {
         if (err) {
             return res.status(401).json({ message: 'Bad token' })
         }
+        req.userID = decodedToken.payload.userId
+        req.roles = decodedToken.payload.roles
+
         next()
     })
 }
