@@ -5,31 +5,14 @@ const FRONT_URL = process.env.FRONT_URL || "localhost"
 const FRONT_PORT = process.env.FRONT_PORT || 3000
 const SOCKET_URL_LISTEN = "http://" + FRONT_URL + ":" + FRONT_PORT //"http://localhost:3000"
 
+const GameService = require("./services/GameService")
+
 const socketIO = require('socket.io')(http, {
     cors: {
         origin: SOCKET_URL_LISTEN
     }
 });
 
-const getWordHit = (Word) => {
-    let hit
-    switch (Word) {
-        case "con":
-            hit = 10
-            break;
-        case "salope":
-            hit = 30
-            break;
-        case "pute":
-            hit = 40
-            break;
-        default:
-            hit = 0
-            break;
-    }
-
-    return hit;
-}
 
 let users = [];
 
@@ -38,26 +21,22 @@ socketIO.on('connection', (socket) => {
 
     //Listens and sends the return message to all the users on the server
     socket.on('message', async (data) => {
+        console.log("message :", data)
+
         // update messages to All clients
         socketIO.emit('messageResponse', data);
 
         console.log("users before message hit:", users)
+        // Get Word hit value
+        const hitWord = await GameService.getWordHit(data.text)
 
         // update score to All clients
-        const hitWord = await getWordHit(data.text)
         const socketIdSender = data.socketID
-        users.forEach(user => {
-            if (user.socketID !== socketIdSender) {
-                user.score = user.score - hitWord
-                if (user.score < 0) {
-                    user.score = 0
-                }
-            }
-        });
+        users = await GameService.hitOpponentsUsers(users, socketIdSender, hitWord)
+        console.log("users after message hit :", users)
+
         socketIO.emit('updateUsersScores', users);
 
-        console.log("message :", data)
-        console.log("users after message hit :", users)
     });
 
     //Listens when a user is typing
@@ -68,24 +47,20 @@ socketIO.on('connection', (socket) => {
 
 
     //Listens when a new user joins the server
-    socket.on('newUser', (data) => {
+    socket.on('newUser', async (data) => {
         //Adds the new user to the list of users
-        users.push(
-            {
-                ...data,
-                score: 100
-            }
-        );
-        console.log(users);
+        users = await GameService.addUserToGroup(users, data)
+
         //Sends the list of users to the client
         socketIO.emit('newUserResponse', users);
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async (data) => {
         console.log('❌: A user disconnected');
         //Updates the list of users when a user disconnects from the server
-        users = users.filter((user) => user.socketID !== socket.id);
-        // console.log(users);
+        const socketIdUser = socket.id
+        users = await GameService.deleteUserFromGroup(users, socketIdUser)
+
         //Sends the list of users to the client
         socketIO.emit('newUserResponse', users);
         socket.disconnect();
