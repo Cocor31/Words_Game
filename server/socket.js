@@ -45,7 +45,6 @@ socketIO.on('connection', (socket) => {
         socket.broadcast.emit('typingResponse', data)
     });
 
-
     //Listens when a new user joins the server
     socket.on('newUser', async (data) => {
         //Adds the new user to the list of users
