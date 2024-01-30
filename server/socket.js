@@ -13,7 +13,6 @@ const socketIO = require('socket.io')(http, {
     }
 });
 
-
 let users = [];
 
 socketIO.on('connection', (socket) => {
